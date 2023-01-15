@@ -43,23 +43,20 @@ control "cis-gcp-#{control_id}-#{control_abbrev}" do
   ref 'GCP Docs', url: 'https://cloud.google.com/storage/docs/overview'
   ref 'GCP Docs', url: 'https://cloud.google.com/storage/docs/access-control/iam-roles'
 
-  metric_log_filter = 'resource.type=gcs_bucket AND protoPayload.methodName="storage.setIamPermissions"'
-  metrics = google_project_metrics(project: gcp_project_id).where(metric_filter: metric_log_filter)
-  describe "[#{gcp_project_id}] Cloud Storage changes metric" do
-    subject { metrics }
+  log_filter = 'resource.type=gcs_bucket AND protoPayload.methodName="storage.setIamPermissions"'
+  describe "[#{gcp_project_id}] Cloud Storage changes filter" do
+    subject { google_project_metrics(project: gcp_project_id).where(metric_filter: log_filter) }
     it { should exist }
   end
 
-  alerting_policies = google_project_alert_policies(project: gcp_project_id).where(policy_enabled_state: true)
-  metrics.metric_types.each do |metric|
+  google_project_metrics(project: gcp_project_id).where(metric_filter: log_filter).metric_types.each do |metrictype|
     describe.one do
-      alerting_policy_condition_filter = "metric.type=\"#{metric}\" resource.type=\"gcs_bucket\""
-      alerting_policies.conditions.each do |conditions|
-        conditions.each do |condition|
-          describe "[#{gcp_project_id}] Cloud Storage changes alert policy" do
-            subject { condition.condition_threshold.filter }
-            it { should cmp alerting_policy_condition_filter }
-          end
+      filter = "metric.type=\"#{metrictype}\" resource.type=\"gcs_bucket\""
+      google_project_alert_policies(project: gcp_project_id).where(policy_enabled_state: true).policy_names.each do |policy|
+        condition = google_project_alert_policy_condition(policy: policy, filter: filter)
+        describe "[#{gcp_project_id}] Cloud Storage changes alert policy" do
+          subject { condition }
+          it { should exist }
         end
       end
     end
